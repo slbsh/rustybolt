@@ -1,6 +1,7 @@
+prefix = '!'
 roll_channel = 1118620323324117052
 min_points = 600
 max_points = 2000
 teams = 2
-players = ["627015977233678336"]
+players = ["627015977233678336", "438569265831084033", "374134385710202882"]
 countries = ["Britan", "America", "Japan", "Russia", "Germany", "Italy", "France"]

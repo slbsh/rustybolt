@@ -8,6 +8,9 @@ use ndm::RollSet;
 use rand::{thread_rng, Rng};
 use rand::seq::SliceRandom;
 
+use cpc::units::convert;
+use cpc::units::Unit;
+
 use crate::config::*;
 
 // function for sending messages with batteries included 
@@ -30,7 +33,9 @@ pub async fn bolt_cmd(ctx: &Context, msg: &Message) -> Result<(), Box<dyn Error>
         return Err("Not enough players or countries to start game!".into());
     }
 
-    let mut reply = "Next Game!\n".to_string();
+    send(&ctx, &msg, "doin the thing!").await;
+
+    let mut reply = "".to_string();
 
     // shuffle both for randomly assigning
     conf.players.shuffle(&mut thread_rng());
@@ -45,9 +50,9 @@ pub async fn bolt_cmd(ctx: &Context, msg: &Message) -> Result<(), Box<dyn Error>
         for i in 0..players_per_team {
             writeln!(reply, "<@{}> - {}", conf.players[i], conf.countries[i])?;
             // remove those players from that team
-            conf.players.drain(0..players_per_team);
-            conf.countries.drain(0..players_per_team);
         }
+        conf.players.drain(0..players_per_team);
+        conf.countries.drain(0..players_per_team);
     }
 
     // append the last player is there is one remaining
@@ -72,15 +77,13 @@ pub async fn bolt_cmd(ctx: &Context, msg: &Message) -> Result<(), Box<dyn Error>
     Ok(())
 }
 
-pub async fn roll_cmd(ctx: &Context, msg: &Message, arg: &str) {
+pub async fn roll_cmd(ctx: &Context, msg: &Message, arg: &str) -> Result<(), Box<dyn Error>> {
     // roll the dices, and handle error if one occurs
-    if let Ok(roll) = arg.parse::<RollSet>() {
-        send(&ctx, &msg, &format!("{}", roll)).await;
-    } else {
-        send(&ctx, &msg, "Invalid Format!\nTry: `!r <args>`").await;
-        return;
-    }
-    return;
+    match arg.parse::<RollSet>() {
+       Ok(roll) => msg.reply(&ctx, format!("{}", roll)).await?,
+       Err(_) => msg.reply(&ctx, "no").await?, 
+    };
+    Ok(())
 }
 
 pub async fn join_cmd(ctx: &Context, msg: &Message) -> Result<(), Box<dyn Error>> {
@@ -111,6 +114,23 @@ pub async fn leave_cmd(ctx: &Context, msg: &Message) -> Result<(), Box<dyn Error
 
     // insert the player into config
     conf.players.retain(|u| u != &user);
+    
+    modify_config(conf).await?;
+
+    // confirm to user
+    send(&ctx, &msg, "Left, cya!").await;
+    Ok(())
+}
+
+// removes the specified player
+pub async fn remove_cmd(ctx: &Context, msg: &Message, arg: &str) -> Result<(), Box<dyn Error>> {
+    let mut conf = get_config().await?.clone();
+    let arg = arg.trim().replace(&['<', '>', '@'][..], "");
+
+    // no need to check if the player exists, cause if not it'll just do nothing anyway
+
+    // remove the player from config
+    conf.players.retain(|u| u != &arg);
     
     modify_config(conf).await?;
 
@@ -182,7 +202,7 @@ pub async fn ls_cmd(ctx: &Context, msg: &Message) -> Result<(), Box<dyn Error>> 
     // list them all
     let mut reply = "Players:\n".to_string();
     for (i, player) in conf.players.iter().enumerate() {
-        writeln!(reply, "{}. {}", i + 1, player)?;
+        writeln!(reply, "{}. <@{}>", i + 1, player)?;
     } 
 
     // do the points too
@@ -190,6 +210,146 @@ pub async fn ls_cmd(ctx: &Context, msg: &Message) -> Result<(), Box<dyn Error>> 
     
     // send the list of players
     send(&ctx, &msg, &reply).await;
+    Ok(())
+}
+
+pub async fn convert_cmd(ctx: &Context, msg: &Message, arg: &str) -> Result<(), Box<dyn Error>> {
+    let args = arg.split_once(">").unwrap_or(("", ""));
+
+    let num = cpc::eval(args.0, true, Unit::Kelvin, false)?;
+
+    let to_unit = match args.1.trim().to_lowercase().as_str() {
+        "ns" => Unit::Nanosecond,
+        //"" => Unit::Microsecond,
+        "ms" => Unit::Millisecond,
+        "s" => Unit::Second,
+        "min" => Unit::Minute,
+        "h" => Unit::Hour,
+        /*"" => Unit::Day,
+        "" => Unit::Week,
+        "" => Unit::Month,*/
+        "y" => Unit::Year,
+        "mm" => Unit::Millimeter,
+        "cm" => Unit::Centimeter,
+        "dm" => Unit::Decimeter,
+        "m" => Unit::Meter,
+        "km" => Unit::Kilometer,
+        "in" => Unit::Inch,
+        "ft" => Unit::Foot,
+        "yd" => Unit::Yard,
+        "mi" => Unit::Mile,
+        "ly" => Unit::LightYear,
+        "ls" => Unit::LightSecond,
+        /*"" => Unit::SquareMillimeter,
+        "" => Unit::SquareCentimeter,
+        "" => Unit::SquareDecimeter,
+        "" => Unit::SquareMeter,
+        "" => Unit::SquareKilometer,
+        "" => Unit::SquareInch,
+        "" => Unit::SquareFoot,
+        "" => Unit::SquareYard,
+        "" => Unit::SquareMile,
+        "" => Unit::Are,
+        "" => Unit::Decare,
+        "" => Unit::Hectare,
+        "" => Unit::Acre,
+        "" => Unit::CubicMillimeter,
+        "" => Unit::CubicCentimeter,
+        "" => Unit::CubicDecimeter,
+        "" => Unit::CubicMeter,
+        "" => Unit::CubicKilometer,
+        "" => Unit::CubicInch,
+        "" => Unit::CubicFoot,
+        "" => Unit::CubicYard,
+        "" => Unit::CubicMile,*/
+        "ml" => Unit::Milliliter,
+        "cl" => Unit::Centiliter,
+        "dl" => Unit::Deciliter,
+        "l" => Unit::Liter,
+        //"" => Unit::Teaspoon,
+        //"" => Unit::Tablespoon,
+        "fl oz" => Unit::FluidOunce,
+        //"" => Unit::Cup,
+        //"" => Unit::Pint,
+        //"" => Unit::Quart,
+        //"" => Unit::Gallon,
+        "mg" => Unit::Milligram,
+        "g" => Unit::Gram,
+        "hg" => Unit::Hectogram,
+        "kg" => Unit::Kilogram,
+        "t" => Unit::MetricTon,
+        "oz" => Unit::Ounce,
+        "lb" => Unit::Pound,
+        "st" => Unit::Stone,
+        "j" => Unit::Joule,
+        "nm" => Unit::NewtonMeter,
+        "kj" => Unit::Kilojoule,
+        "mj" => Unit::Megajoule,
+        "gj" => Unit::Gigajoule,
+        "tj" => Unit::Terajoule,
+        "cal" => Unit::Calorie,
+        "kcal" => Unit::KiloCalorie,
+        "btu" => Unit::BritishThermalUnit,
+        "wh" => Unit::WattHour,
+        "kwh" => Unit::KilowattHour,
+        "mwh" => Unit::MegawattHour,
+        "gwh" => Unit::GigawattHour,
+        "twh" => Unit::TerawattHour,
+        "pwh" => Unit::PetawattHour,
+        "w" => Unit::Watt,
+        "kw" => Unit::Kilowatt,
+        "mw" => Unit::Megawatt,
+        "gw" => Unit::Gigawatt,
+        "tw" => Unit::Terawatt,
+        "pw" => Unit::Petawatt,
+        "btu/min" => Unit::BritishThermalUnitsPerMinute,
+        "btu/h" => Unit::BritishThermalUnitsPerHour,
+        "hp" => Unit::MetricHorsepower,
+        "ma" => Unit::Milliampere,
+        "a" => Unit::Ampere,
+        "ka" => Unit::Kiloampere,
+        //"" => Unit::Abampere,
+        //"" => Unit::Milliohm,
+        //"" => Unit::Ohm,
+        //"" => Unit::Kiloohm,
+        "mV" => Unit::Millivolt,
+        "v" => Unit::Volt,
+        "kv" => Unit::Kilovolt,
+        "pa" => Unit::Pascal,
+        "kpa" => Unit::Kilopascal,
+        "atm" => Unit::Atmosphere,
+        "mb" => Unit::Millibar,
+        "b" => Unit::Bar,
+        "inhg" => Unit::InchOfMercury,
+        "lbf/in2"|"psi" => Unit::PoundsPerSquareInch,
+        "torr" => Unit::Torr,
+        "hz" => Unit::Hertz,
+        "khz" => Unit::Kilohertz,
+        "mhz" => Unit::Megahertz,
+        "ghz" => Unit::Gigahertz,
+        "thZ" => Unit::Terahertz,
+        "phz" => Unit::Petahertz,
+        "rpm" => Unit::RevolutionsPerMinute,
+        "km/h" => Unit::KilometersPerHour,
+        "m/s" => Unit::MetersPerSecond,
+        "mi/h" => Unit::MilesPerHour,
+        "ft/s" => Unit::FeetPerSecond,
+        "kn"|"kt" => Unit::Knot,
+        "k" => Unit::Kelvin,
+        "c" => Unit::Celsius,
+        "f" => Unit::Fahrenheit,
+        &_ => Unit::NoUnit,
+    };
+
+    let conv = match convert(num, to_unit) {
+        Ok(number) => number,
+        Err(why) => {
+            msg.reply(&ctx, format!("{}", why)).await?;
+            return Ok(());
+        },
+    };
+
+    msg.reply(&ctx, format!("{:.5}{}", conv.value, args.1.trim())).await?;
     Ok(())
 }
 

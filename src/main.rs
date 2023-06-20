@@ -4,7 +4,7 @@ use serenity::model::channel::Message;
 
 use std::fs;
 
-use crate::config::init_config;
+use crate::config::{init_config, PREFIX};
 use crate::commands::*;
 
 mod config;
@@ -12,61 +12,34 @@ mod commands;
 
 struct Handler {}
 
+async fn command_handler(ctx: &Context, msg: &Message) -> Result<(), Box<dyn std::error::Error>> {
+    // split the args into command and its arguments
+    let arg = msg.content.split_once(" ").unwrap_or(("", ""));
+
+    // match the args to existing commands
+    match arg.0 {
+        "!bolt" => bolt_cmd(&ctx, &msg).await?,
+        "!rm" => remove_cmd(&ctx, &msg, &arg.1).await?,
+        "!r" => roll_cmd(&ctx, &msg, &arg.1).await?,
+        "!join" => join_cmd(&ctx, &msg).await?,
+        "!lv" => leave_cmd(&ctx, &msg).await?,
+        "!pts" => points_cmd(&ctx, &msg, arg.1).await?,
+        "!teams" => teams_cmd(&ctx, &msg, arg.1).await?,
+        "!conv" => convert_cmd(&ctx, &msg, arg.1).await?,
+        "!ls" => ls_cmd(&ctx, &msg).await?,
+        &_ => (),
+    }
+    Ok(())
+}
+
 #[async_trait] 
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        // bolt teams roll
-        if msg.content.trim() == "!bolt" {
-            if let Err(why) = bolt_cmd(&ctx, &msg).await {
-                eprintln!("Failed to run the Bolt Command!: {}", why);
+        // check if a message begins with the prefix, and handle command errors 
+        if msg.content.starts_with(*PREFIX.get().unwrap()) {
+            if let Err(why) = command_handler(&ctx, &msg).await {
+                eprintln!("Command Err!: {}", why);
             }
-            return;
-        }
-
-        // dice roll command
-        if let Some(arg) = msg.content.strip_prefix("!r") {
-            roll_cmd(&ctx, &msg, &arg).await;
-            return;
-        }
-
-        // join the bolt
-        if msg.content.trim() == "!join" {
-            if let Err(why) = join_cmd(&ctx, &msg).await {
-                eprintln!("Failed to run the Join Command!: {}", why);
-            }
-            return;
-        }
-
-        // leave the bolt
-        if msg.content.trim() == "!lv" {
-            if let Err(why) = leave_cmd(&ctx, &msg).await {
-                eprintln!("Failed to run the Leave Command!: {}", why);
-            }
-            return;
-        }
-
-        // set the min/max values for points
-        if let Some(arg) = msg.content.strip_prefix("!points") {
-            if let Err(why) = points_cmd(&ctx, &msg, &arg).await {
-                eprintln!("Failed to run the Points Command!: {}", why);
-            }
-            return;
-        }
-
-        // change the num of teams
-        if let Some(arg) = msg.content.strip_prefix("!teams") {
-            if let Err(why) = teams_cmd(&ctx, &msg, &arg).await {
-                eprintln!("Failed to run the Teams Command!: {}", why);
-            }
-            return;
-        }
-
-        // list all players
-        if msg.content.trim() == "!ls" {
-            if let Err(why) = ls_cmd(&ctx, &msg).await {
-                eprintln!("Failed to run the List Command!: {}", why);
-            }
-            return;
         }
     }
 }
